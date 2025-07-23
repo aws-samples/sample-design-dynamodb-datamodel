@@ -1,0 +1,65 @@
+```
+                                  +-------------------+
+                                  |                   |
+                                  |  API Gateway      |
+                                  |  (TransactionApi) |
+                                  |                   |
+                                  +--------+----------+
+                                           |
+                                           | HTTPS
+                                           |
+                                           v
++------------------+            +---------+----------+
+|                  |            |                    |
+|  IAM Role        |<-----------+  Lambda Function   |
+|  (Transaction    |  Assumes   |  (Transaction      |
+|   LambdaRole)    |            |   Processing)      |
+|                  |            |                    |
++------------------+            +---------+----------+
+                                           |
+                                           | CRUD Operations
+                                           |
+                                           v
+                               +-----------+------------+
+                               |                        |
+                               |  DynamoDB Table        |
+                               |  (TransactionTable)    |
+                               |                        |
+                               |  - PK/SK (Primary)     |
+                               |  - GSI1 (Secondary)    |
+                               |                        |
+                               +------------------------+
+
+Data Model:
+-----------
+1. Transaction Record:
+   PK: TRANS#{transaction_id}
+   SK: METADATA
+   GSI1PK: CUST#{customer_id}
+   GSI1SK: TRANS#{timestamp}
+
+2. Event Record:
+   PK: TRANS#{transaction_id}
+   SK: EVENT#{timestamp}
+   GSI1PK: EVENT#{event_name}
+   GSI1SK: timestamp
+
+3. Delivery Record:
+   PK: DEL#{delivery_id}
+   SK: METADATA
+   GSI1PK: TRANS#{transaction_id}
+   GSI1SK: DEL#{delivery_id}
+
+4. Delivery Status:
+   PK: DEL#{delivery_id}
+   SK: STATUS#CURRENT
+   GSI1PK: STATUS#{status}
+   GSI1SK: timestamp
+
+Operations:
+-----------
+- create_transaction
+- create_event
+- create_delivery
+- update_delivery_status
+```

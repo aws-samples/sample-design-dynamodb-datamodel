@@ -1,0 +1,103 @@
+```
+DynamoDB Single-Table Design: RDS to DynamoDB Migration
+======================================================
+
+Traditional RDS Schema (Normalized)
+----------------------------------
++----------------+       +----------------+       +----------------+       +----------------+
+| Customers      |       | Transactions   |       | Events         |       | Deliveries     |
++----------------+       +----------------+       +----------------+       +----------------+
+| customer_id (PK)|<---->| transaction_id |<---->| event_id (PK)  |       | delivery_id (PK)|
+| name           |       | (PK)           |       | transaction_id |<---->| transaction_id |
+| email          |       | customer_id (FK)|       | event_name     |       | status         |
+| address        |       | status         |       | timestamp      |       | request_xml    |
+| phone          |       | type           |       | message        |       | response_xml   |
++----------------+       +----------------+       +----------------+       +----------------+
+
+DynamoDB Single-Table Design
+---------------------------
++------------------------------------------------------------------------------------------------------+
+|                                       TransactionTable                                               |
++------------------------------------------------------------------------------------------------------+
+| PK (Partition Key)  | SK (Sort Key)      | GSI1PK           | GSI1SK            | Attributes         |
++--------------------+-------------------+------------------+-------------------+--------------------+
+| CUST#123           | METADATA          | CUST#123         | PROFILE           | name, email, etc.  |
+| CUST#123           | ADDRESS#HOME      | REGION#WEST      | CUST#123          | street, city, etc. |
+| TRANS#abc          | METADATA          | CUST#123         | TRANS#2023-07-01  | status, type       |
+| TRANS#abc          | EVENT#2023-07-01  | EVENT#CREATED    | 2023-07-01        | message            |
+| TRANS#abc          | EVENT#2023-07-02  | EVENT#UPDATED    | 2023-07-02        | message            |
+| DEL#xyz            | METADATA          | TRANS#abc        | DEL#xyz           | request_xml        |
+| DEL#xyz            | STATUS#CURRENT    | STATUS#DELIVERED | 2023-07-03        | update_time        |
++--------------------+-------------------+------------------+-------------------+--------------------+
+
+Access Patterns
+--------------
+1. Get customer by ID:
+   - Query: PK = "CUST#123", SK = "METADATA"
+
+2. Get all addresses for a customer:
+   - Query: PK = "CUST#123", SK begins_with "ADDRESS#"
+
+3. Get all transactions for a customer:
+   - Query GSI1: GSI1PK = "CUST#123", GSI1SK begins_with "TRANS#"
+
+4. Get transaction details:
+   - Query: PK = "TRANS#abc", SK = "METADATA"
+
+5. Get all events for a transaction:
+   - Query: PK = "TRANS#abc", SK begins_with "EVENT#"
+
+6. Get all events of a specific type:
+   - Query GSI1: GSI1PK = "EVENT#CREATED"
+
+7. Get delivery for a transaction:
+   - Query GSI1: GSI1PK = "TRANS#abc", GSI1SK begins_with "DEL#"
+
+8. Get delivery details:
+   - Query: PK = "DEL#xyz", SK = "METADATA"
+
+9. Get current status of a delivery:
+   - Query: PK = "DEL#xyz", SK = "STATUS#CURRENT"
+
+10. Get all deliveries with a specific status:
+    - Query GSI1: GSI1PK = "STATUS#DELIVERED"
+
+Entity Relationship Mapping
+-------------------------
++----------------+       +----------------+       +----------------+
+| Customer       |       | Transaction    |       | Delivery       |
++----------------+       +----------------+       +----------------+
+| PK: CUST#id    |------>| PK: TRANS#id   |------>| PK: DEL#id     |
+| SK: METADATA   |       | SK: METADATA   |       | SK: METADATA   |
++----------------+       +----------------+       +----------------+
+                                 |
+                                 |
+                         +----------------+
+                         | Event          |
+                         +----------------+
+                         | PK: TRANS#id   |
+                         | SK: EVENT#time |
+                         +----------------+
+
+Design Principles
+---------------
+1. Overloaded Indexes:
+   - Same index serves multiple access patterns
+   - GSI1 used for customer-transaction, event-type, and status queries
+
+2. Composite Sort Keys:
+   - Hierarchical data with prefixes (EVENT#, STATUS#)
+   - Enables efficient range queries
+
+3. Inverted Indexes:
+   - GSI1 reverses relationships for many-to-one queries
+   - Find transactions by customer, events by type
+
+4. Sparse Indexes:
+   - Not all items have all attributes
+   - Reduces storage and improves query performance
+
+5. Item Collections:
+   - Related items share the same partition key
+   - All events for a transaction stored together
+```
